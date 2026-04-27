@@ -52,15 +52,22 @@ if ! grep -q '"vincentragosta/ena"' composer.json; then
 fi
 
 # --- Derive identifiers ---
-# slug "celebrity-autobiography" → PASCAL "CelebrityAutobiography"
-PASCAL=$(printf '%s' "$SLUG" | awk -F'-' '{
-    out = ""
-    for (i = 1; i <= NF; i++) out = out toupper(substr($i, 1, 1)) substr($i, 2)
-    print out
-}')
-
-# slug "celebrity-autobiography" → DISPLAY "Celebrity Autobiography" (if not provided)
-if [ -z "$DISPLAY" ]; then
+# PascalCase namespace prefers the display name (split on spaces) — that's where
+# real word boundaries live. A single-word slug like "celebrityautobiography" with
+# display "Celebrity Autobiography" produces "CelebrityAutobiography", not
+# "Celebrityautobiography". Falls back to slug (split on -) when no display given.
+if [ -n "$DISPLAY" ]; then
+    PASCAL=$(printf '%s' "$DISPLAY" | awk '{
+        out = ""
+        for (i = 1; i <= NF; i++) out = out toupper(substr($i, 1, 1)) substr($i, 2)
+        print out
+    }')
+else
+    PASCAL=$(printf '%s' "$SLUG" | awk -F'-' '{
+        out = ""
+        for (i = 1; i <= NF; i++) out = out toupper(substr($i, 1, 1)) substr($i, 2)
+        print out
+    }')
     DISPLAY=$(printf '%s' "$SLUG" | awk -F'-' '{
         out = ""
         for (i = 1; i <= NF; i++) {
