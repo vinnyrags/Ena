@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#
+# Rename the Ena starter scaffold to a real project.
+#
+# Replaces the placeholder namespace (Ena), package name (vincentragosta/ena),
+# theme name + text domain across PHP, composer.json, package.json, and style.css.
+# Self-deletes on success.
+#
+# Usage:
+#   ./bin/rename <slug> ["Display Name"]
+#
+# Example:
+#   ./bin/rename celebrity-autobiography "Celebrity Autobiography"
+
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+Usage: ./bin/rename <slug> ["Display Name"]
+
+Arguments:
+  slug          Kebab-case project slug (lowercase, dashes). Required.
+  Display Name  Human-readable theme name. Optional — derived from slug if omitted.
+
+Examples:
+  ./bin/rename celebrity-autobiography "Celebrity Autobiography"
+  ./bin/rename my-project
+USAGE
+    exit 1
+}
+
+# --- Parse arguments ---
+[ $# -lt 1 ] && usage
+SLUG="$1"
+DISPLAY="${2:-}"
+
+# --- Validate slug ---
+if ! printf '%s' "$SLUG" | grep -qE '^[a-z][a-z0-9-]*[a-z0-9]$'; then
+    echo "error: slug must be kebab-case (e.g., celebrity-autobiography). Got: $SLUG" >&2
+    exit 1
+fi
+
+# --- Validate location: must be in a fresh Ena scaffold ---
+if [ ! -f "./bin/rename" ] || [ ! -f "./composer.json" ] || [ ! -f "./style.css" ]; then
+    echo "error: must run from the theme root (bin/rename, composer.json, style.css required)" >&2
+    exit 1
+fi
+
+if ! grep -q '"vincentragosta/ena"' composer.json; then
+    echo "error: composer.json doesn't show the Ena placeholder name. Has rename already been run?" >&2
+    exit 1
+fi
+
+# --- Derive identifiers ---
+# slug "celebrity-autobiography" → PASCAL "CelebrityAutobiography"
+PASCAL=$(printf '%s' "$SLUG" | awk -F'-' '{
+    out = ""
+    for (i = 1; i <= NF; i++) out = out toupper(substr($i, 1, 1)) substr($i, 2)
+    print out
+}')
+
+# slug "celebrity-autobiography" → DISPLAY "Celebrity Autobiography" (if not provided)
+if [ -z "$DISPLAY" ]; then
+    DISPLAY=$(printf '%s' "$SLUG" | awk -F'-' '{
+        out = ""
+        for (i = 1; i <= NF; i++) {
+            out = out toupper(substr($i, 1, 1)) substr($i, 2)
+            if (i < NF) out = out " "
+        }
+        print out
+    }')
+fi
+
+echo "==> Rename plan"
+echo "    slug:      $SLUG"
+echo "    namespace: ${PASCAL}\\"
+echo "    display:   $DISPLAY"
+echo
+
+# --- Replacements ---
+
+# PHP files: replace standalone word "Ena" (covers `namespace Ena;`, `use Ena\…`, `namespace Ena\…`)
+# Also replace 'ena-…' and "ena-…" — asset handle prefixes (e.g., 'ena-theme' → '<slug>-theme').
+echo "==> Updating PHP namespaces and asset handles..."
+find src -name '*.php' -type f -print0 | xargs -0 perl -i -pe 's/\bEna\b/'"${PASCAL}"'/g; s/'\''ena-/'\'''"${SLUG}"'-/g; s/"ena-/"'"${SLUG}"'-/g'
+[ -f functions.php ] && perl -i -pe 's/\bEna\b/'"${PASCAL}"'/g' functions.php
+
+# composer.json: package name + PSR-4 namespace key
+echo "==> Updating composer.json..."
+perl -i -pe 's|vincentragosta/ena|developer/'"${SLUG}"'|g' composer.json
+# JSON file contains literal `Ena\\` for PSR-4 key — match those two literal backslashes
+perl -i -pe 's|\bEna\\\\|'"${PASCAL}"'\\\\|g' composer.json
+
+# package.json: top-level "name"
+echo "==> Updating package.json..."
+perl -i -pe 's|"name": "ena"|"name": "'"${SLUG}"'"|' package.json
+
+# style.css: Theme Name + Text Domain
+echo "==> Updating style.css..."
+perl -i -pe 's|Theme Name: Ena|Theme Name: '"${DISPLAY}"'|' style.css
+perl -i -pe 's|Text Domain: ena|Text Domain: '"${SLUG}"'|' style.css
+
+# README.md: replace with a project stub (Ena's README is about the starter, not the project)
+echo "==> Replacing README.md with project stub..."
+cat > README.md <<EOF
+# ${DISPLAY}
+
+WordPress theme scaffolded from [Ena](https://github.com/vinnyrags/Ena), built on Mythus + IX.
+
+## Quickstart
+
+\`\`\`bash
+composer install
+npm install
+npm run build
+wp theme activate ${SLUG}
+\`\`\`
+EOF
+
+# --- Optionally regenerate autoload ---
+if [ -d "vendor" ] && command -v composer >/dev/null 2>&1; then
+    echo "==> Regenerating autoloader..."
+    composer dump-autoload --quiet
+fi
+
+# --- Self-delete ---
+echo "==> Removing rename script..."
+rm -f ./bin/rename
+rmdir ./bin 2>/dev/null || true
+
+cat <<EOF
+
+✓ Rename complete.
+
+Next steps:
+  composer install   # if not already done
+  npm install
+  npm run build
+  wp theme activate ${SLUG}
+EOF
