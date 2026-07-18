@@ -1,0 +1,46 @@
+# =============================================================================
+# Canonical nginx FastCGI *microcache* for a Mythus/IX droplet site.
+#
+# The platform standard is a SHORT-TTL microcache with a logged-in/POST bypass —
+# NOT long-TTL + purge-on-save. A 30s TTL is the correctness floor: anonymous
+# visitors see edits within 30s, editors bypass entirely (logged-in cookie), and
+# the object cache is never wiped wholesale. No nginx-helper, no Redis required.
+#
+# Replace SLUG with the site's cache namespace (e.g. `mbf`, `avftb`) and ZONE /
+# ZONE_STAGING with its uppercase keys_zone names. Three parts, three places:
+# =============================================================================
+
+# ── 1. http {} block (in /etc/nginx/nginx.conf) ─────────────────────────────
+#   fastcgi_cache_path /var/cache/nginx/fastcgi-SLUG         levels=1:2 keys_zone=ZONE:50m         inactive=60m max_size=500m use_temp_path=off;
+#   fastcgi_cache_path /var/cache/nginx/fastcgi-SLUG-staging levels=1:2 keys_zone=ZONE_STAGING:50m inactive=60m max_size=500m use_temp_path=off;
+#   fastcgi_cache_key  "$scheme$request_method$host$request_uri";
+
+# ── 2. /etc/nginx/conf.d/wp-fastcgi-cache.conf (the bypass maps) ─────────────
+map $request_method $no_cache_method_SLUG { default 0; POST 1; PUT 1; DELETE 1; }
+map $request_uri    $no_cache_uri_SLUG    { default 0; ~*/wp-admin/ 1; ~*/wp-.*\.php 1; ~*/feed/ 1; ~*/sitemap.*\.xml 1; ~*\?(.+)$ 1; }
+map $http_cookie    $no_cache_cookie_SLUG { default 0; ~*comment_author 1; ~*wordpress_logged_in 1; ~*wp-postpass 1; }
+
+# ── 3. each server {} block (prod uses ZONE, staging uses ZONE_STAGING) ──────
+#   set $skip_cache 0;
+#   if ($no_cache_method_SLUG) { set $skip_cache 1; }
+#   if ($no_cache_uri_SLUG)    { set $skip_cache 1; }
+#   if ($no_cache_cookie_SLUG) { set $skip_cache 1; }
+#
+#   location ~ \.php$ {
+#       # …standard fastcgi_pass / fastcgi_param SCRIPT_FILENAME … ;
+#       fastcgi_cache_bypass $skip_cache; fastcgi_no_cache $skip_cache;
+#       fastcgi_cache       ZONE;                    # ZONE_STAGING on the staging vhost
+#       fastcgi_cache_valid 200 30s;                 # ONLY 200, and 30s — see below
+#       fastcgi_cache_valid 404 5m;
+#       add_header X-FastCGI-Cache $upstream_cache_status;
+#   }
+
+# =============================================================================
+# WHY `fastcgi_cache_valid 200 30s` (not `200 301 302 30m`):
+#   • NEVER cache 301/302. A cached redirect (e.g. a transient http→https or
+#     trailing-slash 301 captured during setup) pins a redirect loop for the
+#     whole TTL → ERR_TOO_MANY_REDIRECTS for every visitor. Cache 200s only.
+#   • 30s, not 30m — this is a microcache. Short TTL = editors never chase a
+#     stale page for long, and it converges on the same origin-protection as
+#     long-TTL+purge exactly when traffic warrants it, with no purge machinery.
+# =============================================================================
