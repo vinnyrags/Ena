@@ -26,8 +26,67 @@ wp theme activate <project-slug>
 
 ## Prerequisites
 
-- The project root has Mythus installed as a mu-plugin and IX installed as the parent theme (typically via `composer require vincentragosta/mythus vincentragosta/ix`)
 - Node 22+ and PHP 8.4+
+- The project root has Mythus installed as a mu-plugin and IX installed as the parent theme (typically via `composer require vincentragosta/mythus vincentragosta/ix`)
+- **The project root has a mu-plugin loader** at `wp-content/mu-plugins/mu-autoloader.php` (see below)
+
+### The mu-plugin loader
+
+WordPress only auto-loads mu-plugins that are *files directly inside* `wp-content/mu-plugins/`.
+Composer installs Mythus into a **subdirectory**, so WordPress never loads it on its own.
+
+Without the loader the failure is quiet rather than loud: the theme still renders and the front
+page still returns 200, but Mythus never boots, so no provider ever registers. Nothing in the
+error log points at the cause.
+
+Create `wp-content/mu-plugins/mu-autoloader.php` in the project root:
+
+```php
+<?php
+/**
+ * Plugin Name: MU Plugin Autoloader
+ * Description: Loads the root Composer autoloader and all mu-plugin subdirectories.
+ */
+
+declare(strict_types=1);
+
+// Load the root Composer autoloader — provides namespaces for all
+// Composer-managed mu-plugins and their dependencies.
+$rootAutoload = dirname(__DIR__, 2) . '/vendor/autoload.php';
+
+if (file_exists($rootAutoload)) {
+    require_once $rootAutoload;
+}
+
+// Subdirectory mu-plugins to load, in order.
+// Each entry is the path to the plugin's main file relative to mu-plugins/.
+$plugins = [
+    'mythus/mythus.php',
+];
+
+foreach ($plugins as $plugin) {
+    $path = __DIR__ . '/' . $plugin;
+
+    if (!file_exists($path)) {
+        wp_die(
+            sprintf(
+                'Required mu-plugin <code>%s</code> is not installed. Run <code>composer install</code> from the project root.',
+                $plugin
+            ),
+            'Missing MU Plugin',
+            ['response' => 500, 'back_link' => false]
+        );
+    }
+
+    require_once $path;
+}
+```
+
+Verify it worked before building anything on top of it:
+
+```bash
+wp eval 'echo defined("MYTHUS_VERSION") ? "ok" : "mythus not loaded";'
+```
 
 ## Layout
 
