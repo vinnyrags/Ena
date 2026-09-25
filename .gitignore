@@ -6,8 +6,9 @@ node_modules/
 dist/
 
 # Lock files
+# composer.lock IS tracked — the child theme is the deployed application (not a
+# library), so a committed lock gives deterministic `composer install` on deploy.
 package-lock.json
-composer.lock
 
 # Editor / OS
 .idea/
