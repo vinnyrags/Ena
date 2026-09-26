@@ -9,6 +9,26 @@ once it is tagged **and** the satis registry is rebuilt.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-25
+
+### Fixed
+
+- **`views/front-page.twig` wrapped the content in a second `<main>`, silently
+  breaking full-bleed sections.** IX's `base.twig` already opens
+  `<main class="site-main">` and emits `post.content` inside `.site-content`, so
+  the scaffold's extra `<main class="front-page">` produced two `main` landmarks
+  — but the damage was the layout, not the semantics. IX's breakout rule is
+  `.site-content > .alignfull`, a child combinator, so the wrapper turned every
+  section into a grandchild and capped full-width sections at content width.
+
+  It fails quietly: the markup looks correct, nothing errors, and on a page
+  built from `alignfull` section groups it is the entire layout. All three live
+  sites already avoid it — A View From The Bridge and Celebrity Autobiography by
+  not overriding the block at all, Matchbook Festival by overriding it to
+  nothing but `post.content`, with a comment explaining why. The starter was the
+  only consumer still carrying the wrapper, so every project scaffolded from it
+  inherited the bug and had to rediscover it.
+
 ## [0.1.3] - 2026-09-25
 
 ### Fixed

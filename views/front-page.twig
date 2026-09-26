@@ -1,7 +1,20 @@
 {% extends "base.twig" %}
 
+{# The front page renders its blocks straight into .site-content, with no wrapper.
+
+   IX's base.twig already opens <main class="site-main"> and emits post.content
+   inside .site-content, so a wrapper here would nest a second <main> — two
+   landmarks, invalid HTML — and, less obviously, break the full-bleed breakout.
+
+   IX matches `.site-content > .alignfull` with a child combinator (see
+   common/_layout.scss). A wrapper makes every section a grandchild, the
+   selector stops matching, and full-width sections silently cap at content
+   width. On a page built from alignfull section groups that is the whole
+   layout, and it fails quietly — the markup looks right and nothing errors.
+
+   Overriding the block rather than deleting it: the effect is identical to
+   letting base.twig's default run, but saying it explicitly keeps this comment
+   where the next person will look. #}
 {% block content %}
-    <main class="front-page">
-        {{ post.content }}
-    </main>
+    {{ post.content }}
 {% endblock %}
