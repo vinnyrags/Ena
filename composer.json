@@ -22,7 +22,7 @@
     "php": ">=8.4",
     "vincentragosta/mythus": "^1.0",
     "vincentragosta/ix": "^1.0",
-    "timber/timber": "2.x-dev"
+    "timber/timber": "^2.5"
   },
   "autoload": {
     "psr-4": {
